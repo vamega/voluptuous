@@ -10,7 +10,7 @@ try:
 except ImportError:
     from . import error as er
 
-if sys.version_info >= (3,):
+if sys.version_info >= (3, ):
     long = int
     unicode = str
     basestring = str
@@ -23,6 +23,7 @@ else:
 
     def iteritems(d):
         return d.iteritems()
+
 
 """Schema validation for Python data structures.
 
@@ -131,13 +132,13 @@ def raises(exc, msg=None, regex=None):
         if msg is not None:
             assert str(e) == msg, '%r != %r' % (str(e), msg)
         if regex is not None:
-            assert re.search(regex, str(e)), '%r does not match %r' % (str(e), regex)
+            assert re.search(regex, str(e)), '%r does not match %r' % (str(e),
+                                                                       regex)
 
 
 def Extra(_):
     """Allow keys in the data that are not present in the schema."""
     raise er.SchemaError('"Extra" should never be called')
-
 
 # As extra() is never called there's no way to catch references to the
 # deprecated object, so we just leave an alias here instead.
@@ -201,6 +202,8 @@ class Schema(object):
             return lambda _, v: v
         if isinstance(schema, Object):
             return self._compile_object(schema)
+        if isinstance(schema, InPlaceObject):
+            return self._compile_object(schema)
         if isinstance(schema, collections.Mapping):
             return self._compile_dict(schema)
         elif isinstance(schema, list):
@@ -221,15 +224,17 @@ class Schema(object):
         invalid_msg = invalid_msg or 'mapping value'
 
         # Keys that may be required
-        all_required_keys = set(key for key in schema
-                                if key is not Extra and
-                                ((self.required and not isinstance(key, (Optional, Remove))) or
-                                 isinstance(key, Required)))
+        all_required_keys = set(
+            key
+            for key in schema
+            if key is not Extra and ((self.required and not isinstance(key, (
+                Optional, Remove))) or isinstance(key, Required)))
 
         # Keys that may have defaults
-        all_default_keys = set(key for key in schema
-                               if isinstance(key, Required) or
-                               isinstance(key, Optional))
+        all_default_keys = set(
+            key
+            for key in schema
+            if isinstance(key, Required) or isinstance(key, Optional))
 
         _compiled_schema = {}
         for skey, svalue in iteritems(schema):
@@ -306,19 +311,23 @@ class Schema(object):
                     elif self.extra == ALLOW_EXTRA:
                         out[key] = value
                     elif self.extra != REMOVE_EXTRA:
-                        errors.append(er.Invalid('extra keys not allowed', key_path))
+                        errors.append(er.Invalid('extra keys not allowed',
+                                                 key_path))
                         # else REMOVE_EXTRA: ignore the key so it's removed from output
 
-            # set defaults for any that can have defaults
+                        # set defaults for any that can have defaults
             for key in default_keys:
-                if not isinstance(key.default, Undefined):  # if the user provides a default with the node
+                if not isinstance(
+                        key.default,
+                        Undefined):  # if the user provides a default with the node
                     out[key.schema] = key.default()
                     if key in required_keys:
                         required_keys.discard(key)
 
             # for any required keys left that weren't found and don't have defaults:
             for key in required_keys:
-                msg = key.msg if hasattr(key, 'msg') and key.msg else 'required key not provided'
+                msg = key.msg if hasattr(
+                    key, 'msg') and key.msg else 'required key not provided'
                 errors.append(er.RequiredFieldInvalid(msg, path + [key]))
             if errors:
                 raise er.MultipleInvalid(errors)
@@ -326,6 +335,40 @@ class Schema(object):
             return out
 
         return validate_mapping
+
+    def _compile_in_place_object(self, schema):
+        """Validate an object.
+
+        Has the same behavior as dictionary validator but work with object
+        attributes.
+
+        For example:
+
+            >>> class Structure(object):
+            ...     def __init__(self, one=None, three=None):
+            ...         self.one = one
+            ...         self.three = three
+            ...
+            >>> validate = Schema(Object({'one': 'two', 'three': 'four'}, cls=Structure))
+            >>> with raises(MultipleInvalid, "not a valid value for object value @ data['one']"):
+            ...   validate(Structure(one='three'))
+
+        """
+        base_validate = self._compile_mapping(schema,
+                                              invalid_msg='object value')
+
+        def validate_object(path, data):
+            if (schema.cls is not UNDEFINED and
+                    not isinstance(data, schema.cls)):
+                raise ObjectInvalid('expected a {0!r}'.format(schema.cls),
+                                    path)
+            iterable = _iterate_object(data)
+            iterable = ifilter(lambda item: item[1] is not None, iterable)
+            out = base_validate(path, iterable, {})
+            print(path)
+            return type(data)(**out)
+
+        return validate_object
 
     def _compile_object(self, schema):
         """Validate an object.
@@ -345,12 +388,14 @@ class Schema(object):
             ...   validate(Structure(one='three'))
 
         """
-        base_validate = self._compile_mapping(
-            schema, invalid_msg='object value')
+        base_validate = self._compile_mapping(schema,
+                                              invalid_msg='object value')
 
         def validate_object(path, data):
-            if schema.cls is not UNDEFINED and not isinstance(data, schema.cls):
-                raise er.ObjectInvalid('expected a {0!r}'.format(schema.cls), path)
+            if schema.cls is not UNDEFINED and not isinstance(data,
+                                                              schema.cls):
+                raise er.ObjectInvalid('expected a {0!r}'.format(schema.cls),
+                                       path)
             iterable = _iterate_object(data)
             iterable = ifilter(lambda item: item[1] is not None, iterable)
             out = base_validate(path, iterable, {})
@@ -434,8 +479,8 @@ class Schema(object):
          "expected str for dictionary value @ data['adict']['strfield']"]
 
         """
-        base_validate = self._compile_mapping(
-            schema, invalid_msg='dictionary value')
+        base_validate = self._compile_mapping(schema,
+                                              invalid_msg='dictionary value')
 
         groups_of_exclusion = {}
         groups_of_inclusion = {}
@@ -505,7 +550,8 @@ class Schema(object):
 
         def validate_sequence(path, data):
             if not isinstance(data, seq_type):
-                raise er.SequenceTypeInvalid('expected a %s' % seq_type_name, path)
+                raise er.SequenceTypeInvalid('expected a %s' % seq_type_name,
+                                             path)
 
             # Empty seq schema, allow any data.
             if not schema:
@@ -580,7 +626,8 @@ class Schema(object):
         :param extra: if set, overrides `extra` of this `Schema`
         """
 
-        assert type(self.schema) == dict and type(schema) == dict, 'Both schemas must be dictionary-based'
+        assert type(self.schema) == dict and type(
+            schema) == dict, 'Both schemas must be dictionary-based'
 
         result = self.schema.copy()
         result.update(schema)
@@ -610,6 +657,7 @@ def _compile_scalar(schema):
     ...   _compile_scalar(lambda v: float(v))([], 'a')
     """
     if isinstance(schema, type):
+
         def validate_instance(path, data):
             if isinstance(data, schema):
                 return data
@@ -620,6 +668,7 @@ def _compile_scalar(schema):
         return validate_instance
 
     if callable(schema):
+
         def validate_callable(path, data):
             try:
                 return schema(data)
@@ -766,6 +815,15 @@ class Msg(object):
         return 'Msg(%s, %s, cls=%s)' % (self._schema, self.msg, self.cls)
 
 
+class InPlaceObject(dict):
+    """Indicate that we should work with attributes, however modify the object
+    in place instead of creating a new object."""
+
+    def __init__(self, schema, cls=UNDEFINED):
+        self.cls = cls
+        super(Object, self).__init__(schema)
+
+
 class Object(dict):
     """Indicate that we should work with attributes, not keys."""
 
@@ -780,7 +838,6 @@ class VirtualPathComponent(str):
 
     def __repr__(self):
         return self.__str__()
-
 
 # Markers.py
 
@@ -967,7 +1024,7 @@ class Remove(Marker):
         return self.__class__
 
     def __repr__(self):
-        return "Remove(%r)" % (self.schema,)
+        return "Remove(%r)" % (self.schema, )
 
 
 def message(default=None, cls=None):
@@ -999,7 +1056,8 @@ def message(default=None, cls=None):
         ...   assert isinstance(e.errors[0], IntegerInvalid)
     """
     if cls and not issubclass(cls, er.Invalid):
-        raise er.SchemaError("message can only use subclases of Invalid as custom class")
+        raise er.SchemaError(
+            "message can only use subclases of Invalid as custom class")
 
     def decorator(f):
         @wraps(f)
@@ -1009,7 +1067,8 @@ def message(default=None, cls=None):
                 try:
                     return f(*args, **kwargs)
                 except ValueError:
-                    raise (clsoverride or cls or er.ValueInvalid)(msg or default or 'invalid value')
+                    raise (clsoverride or cls or
+                           er.ValueInvalid)(msg or default or 'invalid value')
 
             return wrapper
 
