@@ -203,7 +203,7 @@ class Schema(object):
         if isinstance(schema, Object):
             return self._compile_object(schema)
         if isinstance(schema, InPlaceObject):
-            return self._compile_object(schema)
+            return self._compile_in_place_object(schema)
         if isinstance(schema, collections.Mapping):
             return self._compile_dict(schema)
         elif isinstance(schema, list):
